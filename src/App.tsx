@@ -44,6 +44,12 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
+  const [isAddManualOpen, setIsAddManualOpen] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  
   // Voice recognition instance
   const recognitionRef = useRef<any>(null);
 
@@ -133,18 +139,35 @@ function App() {
     );
   };
 
-  const deletePatient = (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا المريض نهائياً؟')) {
-      setPatients(prev => prev.filter(p => p.id !== id));
+  const confirmDelete = () => {
+    if (deleteConfirmId) {
+      setPatients(prev => prev.filter(p => p.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+    }
+  };
+
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualName.trim() && manualPhone.trim()) {
+      addPatient(manualName.trim(), manualPhone.trim());
+      setIsAddManualOpen(false);
+      setManualName('');
+      setManualPhone('');
     }
   };
 
   const openWhatsApp = (phone: string) => {
-    let cleanPhone = phone.replace(/[^0-9+]/g, '');
-    // Ensure country code if missing (optional, adjust based on target region)
-    if (cleanPhone.startsWith('0')) {
-       // example for Egypt, can be customized or kept generic
-       cleanPhone = '+2' + cleanPhone;
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Convert to international format for Egypt without 00 or + 
+    // Example: 01012345678 -> 201012345678
+    if (cleanPhone.startsWith('002')) {
+       cleanPhone = cleanPhone.substring(3);
+       cleanPhone = '20' + cleanPhone;
+    } else if (cleanPhone.startsWith('0')) {
+       cleanPhone = '2' + cleanPhone;
+    } else if (!cleanPhone.startsWith('20')) {
+       cleanPhone = '20' + cleanPhone;
     }
 
     const msg = `موعد الزيارة القادمة مع طبيب التقويم ان شاء الله يوم ${settings.day} تاريخ ${settings.date} الساعة ${settings.time} الرجاء الحضور ف الموعد`;
@@ -193,16 +216,21 @@ function App() {
       {/* Header */}
       <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
         <h1 className="text-xl font-bold">عيادة التقويم</h1>
-        <button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
-          <Settings size={24} />
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setIsAddManualOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
+            <Plus size={24} />
+          </button>
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
+            <Settings size={24} />
+          </button>
+        </div>
       </header>
 
       {/* Main List */}
       <main className="p-4 space-y-4">
         {sortedPatients.length === 0 ? (
           <div className="text-center text-gray-500 mt-10">
-            لا يوجد مرضى في القائمة. اضغط على زر الميكروفون للإضافة.
+            لا يوجد مرضى في القائمة. اضغط على الميكروفون أو زر الإضافة (+) لإدخال مريض.
           </div>
         ) : (
           sortedPatients.map((patient) => (
@@ -211,7 +239,7 @@ function App() {
               className={`rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 transition-all duration-300 relative ${patient.done ? 'opacity-50 grayscale bg-gray-100' : patient.colorClass || 'bg-white'}`}
             >
               <button 
-                onClick={() => deletePatient(patient.id)}
+                onClick={() => setDeleteConfirmId(patient.id)}
                 className="absolute top-2 left-2 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"
                 title="حذف المريض"
               >
@@ -227,8 +255,8 @@ function App() {
                     <h2 className={`text-lg font-bold text-gray-800 ${patient.done ? 'line-through' : ''}`}>
                       {patient.name}
                     </h2>
-                    <p className={`text-gray-600 ${patient.done ? 'line-through' : ''}`} dir="ltr">
-                      {patient.phone}
+                    <p className={`text-gray-600 ${patient.done ? 'line-through' : ''} text-right w-full`}>
+                      <bdi>{patient.phone}</bdi>
                     </p>
                   </div>
                 </div>
@@ -340,6 +368,82 @@ function App() {
                   className="flex-1 bg-blue-600 hover:bg-blue-700 transition text-white rounded-lg p-3 font-bold shadow-md"
                 >
                   حفظ وإغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Add Modal */}
+      {isAddManualOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-30 flex items-center justify-center p-4">
+          <form onSubmit={handleManualSubmit} className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
+            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+              <h2 className="font-bold text-lg">إضافة مريض يدوياً</h2>
+              <button type="button" onClick={() => setIsAddManualOpen(false)} className="text-gray-500 hover:bg-gray-200 p-1 rounded-full">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">اسم المريض</label>
+                <input 
+                  type="text" 
+                  required
+                  value={manualName} 
+                  onChange={e => setManualName(e.target.value)}
+                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="محمد أحمد..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">رقم الهاتف</label>
+                <input 
+                  type="tel" 
+                  required
+                  value={manualPhone} 
+                  onChange={e => setManualPhone(e.target.value)}
+                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none text-right"
+                  dir="ltr"
+                  placeholder="010..."
+                />
+              </div>
+              <button 
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 transition text-white rounded-lg p-3 font-bold mt-4 shadow-md"
+              >
+                إضافة المريض
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Custom Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                <Trash2 size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-800">تأكيد الحذف</h2>
+              <p className="text-gray-600 text-sm">
+                هل أنت متأكد من حذف هذا المريض نهائياً؟ لا يمكن التراجع عن هذه الخطوة.
+              </p>
+              <div className="flex gap-3 mt-6">
+                <button 
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl p-3 font-bold transition"
+                >
+                  إلغاء
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl p-3 font-bold transition shadow-md"
+                >
+                  حذف
                 </button>
               </div>
             </div>
