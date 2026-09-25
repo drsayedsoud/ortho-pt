@@ -152,6 +152,34 @@ function App() {
     window.open(url, '_blank');
   };
 
+  const exportToCSV = () => {
+    if (patients.length === 0) {
+      alert("لا يوجد مرضى للتصدير.");
+      return;
+    }
+    
+    // BOM for Excel Arabic support
+    const BOM = "\uFEFF";
+    let csvContent = BOM + "المسلسل,الاسم,رقم الهاتف,الحالة\n";
+    
+    patients.forEach(p => {
+      const status = p.done ? "تم" : "نشط";
+      // Escape quotes and commas
+      const name = `"${p.name.replace(/"/g, '""')}"`;
+      const phone = `"${p.phone}"`;
+      csvContent += `${p.serialNumber},${name},${phone},${status}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `مرضى_التقويم_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Sort patients: Active first (newest at top), then Done (newest at top)
   const sortedPatients = [...patients].sort((a, b) => {
     if (a.done === b.done) {
@@ -300,12 +328,20 @@ function App() {
                 />
                 <p className="text-xs text-gray-500 mt-1">اختياري: يجعله يفهم الأسماء والأرقام بشكل أدق.</p>
               </div>
-              <button 
-                onClick={() => setIsSettingsOpen(false)}
-                className="w-full bg-blue-600 hover:bg-blue-700 transition text-white rounded-lg p-3 font-bold mt-4 shadow-md"
-              >
-                حفظ وإغلاق
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button 
+                  onClick={exportToCSV}
+                  className="flex-1 bg-green-600 hover:bg-green-700 transition text-white rounded-lg p-3 font-bold shadow-md"
+                >
+                  تصدير لـ Excel
+                </button>
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 transition text-white rounded-lg p-3 font-bold shadow-md"
+                >
+                  حفظ وإغلاق
+                </button>
+              </div>
             </div>
           </div>
         </div>
