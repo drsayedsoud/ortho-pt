@@ -114,23 +114,25 @@ function App() {
   };
 
   const addPatient = (name: string, phone: string) => {
-    const nextSerial = patients.length > 0 
-      ? Math.max(...patients.map(p => p.serialNumber)) + 1 
-      : 1;
+    setPatients(prev => {
+      const nextSerial = prev.length > 0 
+        ? Math.max(...prev.map(p => p.serialNumber)) + 1 
+        : 1;
 
-    const randomColor = cardColors[nextSerial % cardColors.length];
+      const randomColor = cardColors[nextSerial % cardColors.length];
 
-    const newPatient: Patient = {
-      id: crypto.randomUUID(),
-      serialNumber: nextSerial,
-      name,
-      phone,
-      done: false,
-      createdAt: Date.now(),
-      colorClass: randomColor
-    };
+      const newPatient: Patient = {
+        id: crypto.randomUUID(),
+        serialNumber: nextSerial,
+        name,
+        phone,
+        done: false,
+        createdAt: Date.now(),
+        colorClass: randomColor
+      };
 
-    setPatients(prev => [...prev, newPatient]);
+      return [...prev, newPatient];
+    });
   };
 
   const markDone = (id: string) => {
@@ -215,7 +217,14 @@ function App() {
     <div className="min-h-screen pb-20 max-w-md mx-auto bg-gray-50 shadow-lg relative">
       {/* Header */}
       <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 className="text-xl font-bold">عيادة التقويم</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">عيادة التقويم</h1>
+          <div className="text-xs bg-blue-700/50 px-2 py-1 rounded-md flex gap-2 mt-1">
+            <span>الحالات: {patients.length}</span>
+            <span className="text-blue-300">|</span>
+            <span>المنتهي: {patients.filter(p => p.done).length}</span>
+          </div>
+        </div>
         <div className="flex gap-2">
           <button onClick={() => setIsAddManualOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
             <Plus size={24} />
