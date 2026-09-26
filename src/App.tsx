@@ -240,7 +240,7 @@ function App() {
             >
               <div className="flex justify-between items-start">
                 <span className="text-red-600 font-bold text-sm bg-red-50 px-2 py-0.5 rounded-md border border-red-100">
-                  #{patient.serialNumber}
+                  {patient.serialNumber}
                 </span>
                 <button 
                   onClick={() => setDeleteConfirmId(patient.id)}
@@ -256,7 +256,7 @@ function App() {
                   {patient.name}
                 </h2>
                 <p className={`text-gray-600 ${patient.done ? 'line-through' : ''} text-right w-full text-lg`}>
-                  <bdi>{patient.phone}</bdi>
+                  <span dir="ltr">{patient.phone}</span>
                 </p>
               </div>
               
@@ -409,7 +409,7 @@ function App() {
                   required
                   value={manualPhone} 
                   onChange={e => setManualPhone(e.target.value)}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none text-right"
+                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none text-left"
                   dir="ltr"
                   placeholder="010..."
                 />

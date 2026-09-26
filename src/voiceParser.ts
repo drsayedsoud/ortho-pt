@@ -36,9 +36,11 @@ Text: "${transcript}"
   let nameWords = [];
 
   for (const word of words) {
-    const cleaned = word.replace(/[^0-9+]/g, '');
-    if (cleaned.length >= 8) {
-      phone = cleaned;
+    let cleaned = word.replace(/[^0-9+٠-٩]/g, '');
+    if (cleaned.length > 0) {
+      // Normalize Arabic digits to English digits
+      cleaned = cleaned.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 1632 + 48));
+      phone += cleaned;
     } else {
       nameWords.push(word);
     }
