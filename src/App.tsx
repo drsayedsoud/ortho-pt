@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Mic, CheckCircle2, MessageCircle, Trash2, X } from 'lucide-react';
+import { Settings, Mic, CheckCircle2, MessageCircle, Trash2, X, Plus } from 'lucide-react';
 import { parseVoiceInput } from './voiceParser';
 
 interface Patient {
