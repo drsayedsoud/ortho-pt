@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Mic, CheckCircle2, MessageCircle, Trash2, X, Plus } from 'lucide-react';
+import { Settings, Mic, CheckCircle2, MessageCircle, Trash2, X, Plus, Phone } from 'lucide-react';
 import { parseVoiceInput } from './voiceParser';
 
 interface Patient {
@@ -236,45 +236,50 @@ function App() {
           sortedPatients.map((patient) => (
             <div 
               key={patient.id} 
-              className={`rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 transition-all duration-300 relative ${patient.done ? 'opacity-50 grayscale bg-gray-100' : patient.colorClass || 'bg-white'}`}
+              className={`rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 transition-all duration-300 ${patient.done ? 'opacity-50 grayscale bg-gray-100' : patient.colorClass || 'bg-white'}`}
             >
-              <button 
-                onClick={() => setDeleteConfirmId(patient.id)}
-                className="absolute top-2 left-2 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"
-                title="حذف المريض"
-              >
-                <Trash2 size={18} />
-              </button>
-
               <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <span className="bg-white text-blue-800 shadow-sm text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center">
-                    {patient.serialNumber}
-                  </span>
-                  <div>
-                    <h2 className={`text-lg font-bold text-gray-800 ${patient.done ? 'line-through' : ''}`}>
-                      {patient.name}
-                    </h2>
-                    <p className={`text-gray-600 ${patient.done ? 'line-through' : ''} text-right w-full`}>
-                      <bdi>{patient.phone}</bdi>
-                    </p>
-                  </div>
-                </div>
+                <span className="text-red-600 font-bold text-sm bg-red-50 px-2 py-0.5 rounded-md border border-red-100">
+                  #{patient.serialNumber}
+                </span>
+                <button 
+                  onClick={() => setDeleteConfirmId(patient.id)}
+                  className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-full transition -mt-1 -ml-1"
+                  title="حذف المريض"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <h2 className={`text-xl font-bold text-gray-800 ${patient.done ? 'line-through' : ''}`}>
+                  {patient.name}
+                </h2>
+                <p className={`text-gray-600 ${patient.done ? 'line-through' : ''} text-right w-full text-lg`}>
+                  <bdi>{patient.phone}</bdi>
+                </p>
               </div>
               
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-3 mt-2 items-center">
+                <a 
+                  href={`tel:${patient.phone}`}
+                  className="w-10 h-10 flex flex-shrink-0 items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full transition shadow-sm"
+                  title="اتصال"
+                >
+                  <Phone size={18} />
+                </a>
                 <button 
                   onClick={() => openWhatsApp(patient.phone)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg transition"
+                  className="w-10 h-10 flex flex-shrink-0 items-center justify-center bg-green-500 hover:bg-green-600 text-white rounded-full transition shadow-sm"
+                  title="واتساب"
                 >
-                  <MessageCircle size={20} />
-                  <span>واتساب</span>
+                  <MessageCircle size={18} />
                 </button>
                 <button 
                   onClick={() => markDone(patient.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg transition ${patient.done ? 'bg-gray-300 text-gray-700' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'}`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition text-sm font-bold shadow-sm h-10 ${patient.done ? 'bg-gray-300 text-gray-700' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                 >
-                  <CheckCircle2 size={20} />
+                  <CheckCircle2 size={18} />
                   <span>{patient.done ? 'تراجع' : 'تم'}</span>
                 </button>
               </div>
