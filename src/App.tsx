@@ -42,6 +42,7 @@ type KeyModalType = 'edit' | 'save' | 'test' | null;
 
 function App() {
   const [activeTab, setActiveTab] = useState<'main' | 'waiting'>('main');
+  const [isLoading, setIsLoading] = useState(true);
   const activeTabRef = useRef(activeTab);
 
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -188,6 +189,7 @@ function App() {
       setPatients(data);
       if (isInitialLoad) {
           isInitialLoad = false;
+          setIsLoading(false);
           setTimeout(() => {
              const syncMsg = document.getElementById('sync-msg');
              if (syncMsg) {
@@ -397,8 +399,15 @@ function App() {
         : 'bg-gradient-to-l from-blue-800 to-blue-500'
       } shadow-lg`}>
 
+        {/* Loading Progress Bar */}
+        {isLoading && (
+          <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20 overflow-hidden">
+            <div className="h-full bg-white animate-[pulse_1s_ease-in-out_infinite] w-full"></div>
+          </div>
+        )}
+
         {/* Row 1: Title */}
-        <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
+        <div className="flex items-center gap-2.5 px-4 pt-3 pb-2 relative">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/20 shadow flex-shrink-0">
             {isWaiting
               ? <Clock size={20} className="text-white" />
@@ -559,7 +568,7 @@ function App() {
 
                   {isWaiting ? (
                     <button
-                      onClick={() => deleteDoc(doc(db, 'waitingPatients', patient.id))}
+                      onClick={() => setDeleteConfirmId(patient.id)}
                       className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition text-sm font-bold h-10"
                     >
                       <CheckCircle2 size={16} />
@@ -568,7 +577,7 @@ function App() {
                   ) : (
                     <button
                       onClick={() => markDone(patient.id)}
-                      className={`ml-auto flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm ${
+                      className={`mr-auto flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm ${
                         patient.done ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                       }`}
                     >
