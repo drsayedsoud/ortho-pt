@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Mic, CheckCircle2, MessageCircle, Trash2, X, Plus, Phone } from 'lucide-react';
+import { Settings, Mic, CheckCircle2, MessageCircle, Trash2, X, Plus, Phone, Clock, ListTodo } from 'lucide-react';
 import { parseVoiceInput } from './voiceParser';
 
 interface Patient {
@@ -32,10 +32,19 @@ const cardColors = [
 ];
 
 function App() {
+  const [activeTab, setActiveTab] = useState<'main' | 'waiting'>('main');
+  const activeTabRef = useRef(activeTab);
+
   const [patients, setPatients] = useState<Patient[]>(() => {
     const saved = localStorage.getItem('ortho_patients');
     return saved ? JSON.parse(saved) : [];
   });
+  
+  const [waitingPatients, setWaitingPatients] = useState<Patient[]>(() => {
+    const saved = localStorage.getItem('ortho_waiting');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('ortho_settings');
     return saved ? JSON.parse(saved) : defaultSettings;
@@ -54,8 +63,16 @@ function App() {
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
     localStorage.setItem('ortho_patients', JSON.stringify(patients));
   }, [patients]);
+
+  useEffect(() => {
+    localStorage.setItem('ortho_waiting', JSON.stringify(waitingPatients));
+  }, [waitingPatients]);
 
   useEffect(() => {
     localStorage.setItem('ortho_settings', JSON.stringify(settings));
@@ -114,7 +131,10 @@ function App() {
   };
 
   const addPatient = (name: string, phone: string) => {
-    setPatients(prev => {
+    const isWaiting = activeTabRef.current === 'waiting';
+    const setList = isWaiting ? setWaitingPatients : setPatients;
+
+    setList(prev => {
       const nextSerial = prev.length > 0 
         ? Math.max(...prev.map(p => p.serialNumber)) + 1 
         : 1;
@@ -136,6 +156,7 @@ function App() {
   };
 
   const markDone = (id: string) => {
+    if (activeTab === 'waiting') return;
     setPatients(prev => 
       prev.map(p => p.id === id ? { ...p, done: !p.done } : p)
     );
@@ -143,7 +164,11 @@ function App() {
 
   const confirmDelete = () => {
     if (deleteConfirmId) {
-      setPatients(prev => prev.filter(p => p.id !== deleteConfirmId));
+      if (activeTab === 'waiting') {
+        setWaitingPatients(prev => prev.filter(p => p.id !== deleteConfirmId));
+      } else {
+        setPatients(prev => prev.filter(p => p.id !== deleteConfirmId));
+      }
       setDeleteConfirmId(null);
     }
   };
@@ -162,7 +187,6 @@ function App() {
     let cleanPhone = phone.replace(/[^0-9]/g, '');
     
     // Convert to international format for Egypt without 00 or + 
-    // Example: 01012345678 -> 201012345678
     if (cleanPhone.startsWith('002')) {
        cleanPhone = cleanPhone.substring(3);
        cleanPhone = '20' + cleanPhone;
@@ -178,7 +202,8 @@ function App() {
   };
 
   const exportToCSV = () => {
-    if (patients.length === 0) {
+    const listToExport = activeTab === 'waiting' ? waitingPatients : patients;
+    if (listToExport.length === 0) {
       alert("لا يوجد مرضى للتصدير.");
       return;
     }
@@ -187,7 +212,7 @@ function App() {
     const BOM = "\uFEFF";
     let csvContent = BOM + "المسلسل,الاسم,رقم الهاتف,الحالة\n";
     
-    patients.forEach(p => {
+    listToExport.forEach(p => {
       const status = p.done ? "تم" : "نشط";
       // Escape quotes and commas
       const name = `"${p.name.replace(/"/g, '""')}"`;
@@ -199,39 +224,65 @@ function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `مرضى_التقويم_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.csv`);
+    const fileName = activeTab === 'waiting' 
+      ? `حالات_الانتظار_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.csv`
+      : `مرضى_التقويم_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.csv`;
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  const currentList = activeTab === 'waiting' ? waitingPatients : patients;
+
   // Sort patients: Active first (newest at top), then Done (newest at top)
-  const sortedPatients = [...patients].sort((a, b) => {
+  const sortedPatients = [...currentList].sort((a, b) => {
     if (a.done === b.done) {
       return b.createdAt - a.createdAt; // Newest first
     }
     return a.done ? 1 : -1; // Active first
   });
 
+  const isWaiting = activeTab === 'waiting';
+
   return (
-    <div className="min-h-screen pb-20 max-w-md mx-auto bg-gray-50 shadow-lg relative">
+    <div className={`min-h-screen pb-20 max-w-md mx-auto shadow-lg relative transition-colors duration-300 ${isWaiting ? 'bg-orange-50' : 'bg-gray-50'}`}>
       {/* Header */}
-      <header className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
+      <header className={`${isWaiting ? 'bg-orange-600' : 'bg-blue-600'} text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center transition-colors duration-300`}>
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold">عيادة التقويم</h1>
-          <div className="text-xs bg-blue-700/50 px-2 py-1 rounded-md flex gap-2 mt-1">
-            <span>الحالات: {patients.length}</span>
-            <span className="text-blue-300">|</span>
-            <span>المنتهي: {patients.filter(p => p.done).length}</span>
-          </div>
+          <h1 className="text-xl font-bold">{isWaiting ? 'حالات الانتظار' : 'عيادة التقويم'}</h1>
+          {isWaiting ? (
+            <div className="text-xs bg-orange-700/50 px-2 py-1 rounded-md flex gap-2 mt-1">
+              <span>العدد: {waitingPatients.length}</span>
+            </div>
+          ) : (
+            <div className="text-xs bg-blue-700/50 px-2 py-1 rounded-md flex gap-2 mt-1">
+              <span>الحالات: {patients.length}</span>
+              <span className="text-blue-300">|</span>
+              <span>المنتهي: {patients.filter(p => p.done).length}</span>
+            </div>
+          )}
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setIsAddManualOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
+        <div className="flex gap-2 items-center">
+          {isWaiting ? (
+            <button onClick={() => setActiveTab('main')} className="flex items-center gap-1 text-sm bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-full font-bold transition shadow-sm mr-1">
+              <ListTodo size={16} />
+              العيادة
+            </button>
+          ) : (
+            <button onClick={() => setActiveTab('waiting')} className="flex items-center gap-1 text-sm bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-full font-bold transition shadow-sm mr-1">
+              <Clock size={16} />
+              انتظار
+            </button>
+          )}
+          <button onClick={() => setIsAddManualOpen(true)} className={`p-2 rounded-full transition ${isWaiting ? 'hover:bg-orange-700' : 'hover:bg-blue-700'}`}>
             <Plus size={24} />
           </button>
-          <button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
-            <Settings size={24} />
-          </button>
+          {!isWaiting && (
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-blue-700 rounded-full transition">
+              <Settings size={24} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -239,21 +290,31 @@ function App() {
       <main className="p-4 space-y-4">
         {sortedPatients.length === 0 ? (
           <div className="text-center text-gray-500 mt-10">
-            لا يوجد مرضى في القائمة. اضغط على الميكروفون أو زر الإضافة (+) لإدخال مريض.
+            {isWaiting 
+              ? 'لا يوجد حالات انتظار. اضغط على الميكروفون أو زر الإضافة لإدخال حالة.' 
+              : 'لا يوجد مرضى في القائمة. اضغط على الميكروفون أو زر الإضافة (+) لإدخال مريض.'}
           </div>
         ) : (
           sortedPatients.map((patient) => (
             <div 
               key={patient.id} 
-              className={`rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 transition-all duration-300 ${patient.done ? 'opacity-50 grayscale bg-gray-100' : patient.colorClass || 'bg-white'}`}
+              className={`rounded-xl p-4 shadow-sm border flex flex-col gap-3 transition-all duration-300 ${
+                isWaiting 
+                  ? 'bg-white border-orange-200 border-r-4 border-r-orange-500' 
+                  : (patient.done ? 'opacity-50 grayscale bg-gray-100 border-gray-100' : `${patient.colorClass || 'bg-white'} border-gray-100`)
+              }`}
             >
               <div className="flex justify-between items-start">
-                <span className="text-red-600 font-bold text-sm bg-red-50 px-2 py-0.5 rounded-md border border-red-100">
+                <span className={`font-bold text-sm px-2 py-0.5 rounded-md border ${
+                  isWaiting ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-red-600 bg-red-50 border-red-100'
+                }`}>
                   {patient.serialNumber}
                 </span>
                 <button 
                   onClick={() => setDeleteConfirmId(patient.id)}
-                  className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-full transition -mt-1 -ml-1"
+                  className={`p-1.5 rounded-full transition -mt-1 -ml-1 ${
+                    isWaiting ? 'text-orange-400 hover:text-orange-600 hover:bg-orange-50' : 'text-red-400 hover:text-red-600 hover:bg-red-50'
+                  }`}
                   title="حذف المريض"
                 >
                   <Trash2 size={20} />
@@ -261,10 +322,10 @@ function App() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <h2 className={`text-xl font-bold text-gray-800 ${patient.done ? 'line-through' : ''}`}>
+                <h2 className={`text-xl font-bold text-gray-800 ${!isWaiting && patient.done ? 'line-through' : ''}`}>
                   {patient.name}
                 </h2>
-                <p className={`text-gray-600 ${patient.done ? 'line-through' : ''} text-right w-full text-lg`}>
+                <p className={`text-gray-600 ${!isWaiting && patient.done ? 'line-through' : ''} text-right w-full text-lg`}>
                   <span dir="ltr">{patient.phone}</span>
                 </p>
               </div>
@@ -272,7 +333,9 @@ function App() {
               <div className="flex gap-3 mt-2 items-center">
                 <a 
                   href={`tel:${patient.phone}`}
-                  className="w-10 h-10 flex flex-shrink-0 items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full transition shadow-sm"
+                  className={`w-10 h-10 flex flex-shrink-0 items-center justify-center text-white rounded-full transition shadow-sm ${
+                    isWaiting ? 'bg-orange-500 hover:bg-orange-600' : 'bg-indigo-500 hover:bg-indigo-600'
+                  }`}
                   title="اتصال"
                 >
                   <Phone size={18} />
@@ -284,13 +347,24 @@ function App() {
                 >
                   <MessageCircle size={18} />
                 </button>
-                <button 
-                  onClick={() => markDone(patient.id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition text-sm font-bold shadow-sm h-10 ${patient.done ? 'bg-gray-300 text-gray-700' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
-                >
-                  <CheckCircle2 size={18} />
-                  <span>{patient.done ? 'تراجع' : 'تم'}</span>
-                </button>
+                
+                {isWaiting ? (
+                  <button 
+                    onClick={() => setWaitingPatients(prev => prev.filter(p => p.id !== patient.id))}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition text-sm font-bold shadow-sm h-10 bg-red-100 hover:bg-red-200 text-red-700"
+                  >
+                    <Trash2 size={18} />
+                    <span>تم التواصل حذف الان</span>
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => markDone(patient.id)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition text-sm font-bold shadow-sm h-10 ${patient.done ? 'bg-gray-300 text-gray-700' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                  >
+                    <CheckCircle2 size={18} />
+                    <span>{patient.done ? 'تراجع' : 'تم'}</span>
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -302,7 +376,11 @@ function App() {
         <button 
           onClick={toggleRecording}
           disabled={isProcessing}
-          className={`flex items-center justify-center w-16 h-16 rounded-full shadow-lg transition-transform ${isRecording ? 'bg-red-500 animate-pulse scale-110' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+          className={`flex items-center justify-center w-16 h-16 rounded-full shadow-lg transition-transform text-white ${
+            isRecording 
+              ? 'bg-red-500 animate-pulse scale-110' 
+              : (isWaiting ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700')
+          }`}
         >
           {isProcessing ? (
             <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -313,7 +391,7 @@ function App() {
       </div>
 
       {/* Settings Modal */}
-      {isSettingsOpen && (
+      {isSettingsOpen && !isWaiting && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-30 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
             <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
@@ -407,7 +485,7 @@ function App() {
                   required
                   value={manualName} 
                   onChange={e => setManualName(e.target.value)}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                  className={`w-full border rounded-lg p-2 focus:ring-2 outline-none ${isWaiting ? 'focus:ring-orange-500' : 'focus:ring-blue-500'}`}
                   placeholder="محمد أحمد..."
                 />
               </div>
@@ -418,14 +496,16 @@ function App() {
                   required
                   value={manualPhone} 
                   onChange={e => setManualPhone(e.target.value)}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none text-left"
+                  className={`w-full border rounded-lg p-2 focus:ring-2 outline-none text-left ${isWaiting ? 'focus:ring-orange-500' : 'focus:ring-blue-500'}`}
                   dir="ltr"
                   placeholder="010..."
                 />
               </div>
               <button 
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 transition text-white rounded-lg p-3 font-bold mt-4 shadow-md"
+                className={`w-full transition text-white rounded-lg p-3 font-bold mt-4 shadow-md ${
+                  isWaiting ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
                 إضافة المريض
               </button>
