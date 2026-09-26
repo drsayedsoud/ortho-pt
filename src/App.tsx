@@ -421,11 +421,11 @@ function App() {
                   ) : (
                     <button
                       onClick={() => markDone(patient.id)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition text-sm font-bold shadow-sm h-10 ${
-                        patient.done ? 'bg-gray-200 text-gray-600 hover:bg-gray-300' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm ${
+                        patient.done ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                       }`}
                     >
-                      <CheckCircle2 size={17} />
+                      <CheckCircle2 size={13} />
                       {patient.done ? 'تراجع' : 'تم'}
                     </button>
                   )}
