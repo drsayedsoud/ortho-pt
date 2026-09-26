@@ -421,7 +421,7 @@ function App() {
                   ) : (
                     <button
                       onClick={() => markDone(patient.id)}
-                      className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm ${
+                      className={`ml-auto flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition text-xs font-bold shadow-sm ${
                         patient.done ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                       }`}
                     >
