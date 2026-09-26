@@ -5,6 +5,8 @@ import {
   Stethoscope, Users
 } from 'lucide-react';
 import { parseVoiceInput } from './voiceParser';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 
 interface Patient {
   id: string;
@@ -42,20 +44,11 @@ function App() {
   const [activeTab, setActiveTab] = useState<'main' | 'waiting'>('main');
   const activeTabRef = useRef(activeTab);
 
-  const [patients, setPatients] = useState<Patient[]>(() => {
-    const saved = localStorage.getItem('ortho_patients');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [patients, setPatients] = useState<Patient[]>([]);
 
-  const [waitingPatients, setWaitingPatients] = useState<Patient[]>(() => {
-    const saved = localStorage.getItem('ortho_waiting');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [waitingPatients, setWaitingPatients] = useState<Patient[]>([]);
 
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('ortho_settings');
-    return saved ? JSON.parse(saved) : defaultSettings;
-  });
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -73,11 +66,164 @@ function App() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const recognitionRef = useRef<any>(null);
+  const wakeLockRef = useRef<any>(null);
+  const touchStartXRef = useRef<number>(0);
+  const touchStartYRef = useRef<number>(0);
 
   useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
-  useEffect(() => { localStorage.setItem('ortho_patients', JSON.stringify(patients)); }, [patients]);
-  useEffect(() => { localStorage.setItem('ortho_waiting', JSON.stringify(waitingPatients)); }, [waitingPatients]);
-  useEffect(() => { localStorage.setItem('ortho_settings', JSON.stringify(settings)); }, [settings]);
+
+  // ===== WAKE LOCK: keep screen always on =====
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch (e) {
+        console.warn('Wake Lock not available:', e);
+      }
+    };
+    requestWakeLock();
+
+    // Re-acquire wake lock when page becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      }
+    };
+  }, []);
+
+  // ===== SWIPE GESTURE: navigate back / exit =====
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartXRef.current;
+      const dy = e.changedTouches[0].clientY - touchStartYRef.current;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+
+      // Must be a clear horizontal swipe (more horizontal than vertical, > 80px)
+      if (absDx < 80 || absDy > absDx * 0.7) return;
+
+      // Swipe RIGHT → go back
+      if (dx > 0) {
+        if (activeTabRef.current === 'waiting') {
+          setActiveTab('main');
+        } else {
+          // On main screen → try closing app / going back in history
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.close();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
+
+  // Migration from localStorage to Firebase
+  useEffect(() => {
+    const migrateData = async () => {
+      const migrated = localStorage.getItem('ortho_migrated_to_firebase');
+      if (!migrated) {
+        try {
+          const oldPatientsStr = localStorage.getItem('ortho_patients');
+          if (oldPatientsStr) {
+            const oldPatients = JSON.parse(oldPatientsStr) as Patient[];
+            for (const p of oldPatients) {
+              await setDoc(doc(db, 'patients', p.id), p);
+            }
+          }
+
+          const oldWaitingStr = localStorage.getItem('ortho_waiting');
+          if (oldWaitingStr) {
+            const oldWaiting = JSON.parse(oldWaitingStr) as Patient[];
+            for (const p of oldWaiting) {
+              await setDoc(doc(db, 'waitingPatients', p.id), p);
+            }
+          }
+
+          const oldSettingsStr = localStorage.getItem('ortho_settings');
+          if (oldSettingsStr) {
+            const oldSettings = JSON.parse(oldSettingsStr);
+            await setDoc(doc(db, 'settings', 'main'), oldSettings);
+          }
+
+          localStorage.setItem('ortho_migrated_to_firebase', 'true');
+          console.log("Migration complete!");
+        } catch (e) {
+          console.error("Migration error", e);
+        }
+      }
+    };
+    migrateData();
+  }, []);
+
+  useEffect(() => {
+    let isInitialLoad = true;
+    const unsubPatients = onSnapshot(collection(db, 'patients'), (snapshot) => {
+      const data = snapshot.docs.map(d => d.data() as Patient).sort((a,b) => a.serialNumber - b.serialNumber);
+      setPatients(data);
+      if (isInitialLoad) {
+          isInitialLoad = false;
+          setTimeout(() => {
+             const syncMsg = document.getElementById('sync-msg');
+             if (syncMsg) {
+                 syncMsg.style.display = 'block';
+                 setTimeout(() => { syncMsg.style.display = 'none'; }, 3000);
+             }
+          }, 500);
+      }
+    });
+
+    const unsubWaiting = onSnapshot(collection(db, 'waitingPatients'), (snapshot) => {
+      const data = snapshot.docs.map(d => d.data() as Patient).sort((a,b) => a.serialNumber - b.serialNumber);
+      setWaitingPatients(data);
+    });
+
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'main'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSettings(docSnap.data() as AppSettings);
+      }
+    });
+
+    return () => {
+      unsubPatients();
+      unsubWaiting();
+      unsubSettings();
+    };
+  }, []);
+
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          if (settings.day || settings.date || settings.time || settings.geminiKey) {
+              setDoc(doc(db, 'settings', 'main'), settings);
+          }
+      }, 1000);
+      return () => clearTimeout(timer);
+  }, [settings.day, settings.date, settings.time, settings.geminiKey]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -123,28 +269,29 @@ function App() {
     }
   };
 
-  const addPatient = (name: string, phone: string) => {
+  const addPatient = async (name: string, phone: string) => {
     const isWaitingTab = activeTabRef.current === 'waiting';
-    const setList = isWaitingTab ? setWaitingPatients : setPatients;
-    setList(prev => {
-      const nextSerial = prev.length > 0 ? Math.max(...prev.map(p => p.serialNumber)) + 1 : 1;
-      const randomColor = cardColors[nextSerial % cardColors.length];
-      return [...prev, { id: crypto.randomUUID(), serialNumber: nextSerial, name, phone, done: false, createdAt: Date.now(), colorClass: randomColor }];
-    });
+    const collectionName = isWaitingTab ? 'waitingPatients' : 'patients';
+    const list = isWaitingTab ? waitingPatients : patients;
+    const nextSerial = list.length > 0 ? Math.max(...list.map(p => p.serialNumber)) + 1 : 1;
+    const randomColor = cardColors[nextSerial % cardColors.length];
+    
+    const newPatient = { id: crypto.randomUUID(), serialNumber: nextSerial, name, phone, done: false, createdAt: Date.now(), colorClass: randomColor };
+    await setDoc(doc(db, collectionName, newPatient.id), newPatient);
   };
 
-  const markDone = (id: string) => {
+  const markDone = async (id: string) => {
     if (activeTab === 'waiting') return;
-    setPatients(prev => prev.map(p => p.id === id ? { ...p, done: !p.done } : p));
+    const patient = patients.find(p => p.id === id);
+    if (patient) {
+      await setDoc(doc(db, 'patients', id), { ...patient, done: !patient.done });
+    }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteConfirmId) {
-      if (activeTab === 'waiting') {
-        setWaitingPatients(prev => prev.filter(p => p.id !== deleteConfirmId));
-      } else {
-        setPatients(prev => prev.filter(p => p.id !== deleteConfirmId));
-      }
+      const collectionName = activeTab === 'waiting' ? 'waitingPatients' : 'patients';
+      await deleteDoc(doc(db, collectionName, deleteConfirmId));
       setDeleteConfirmId(null);
     }
   };
@@ -412,7 +559,7 @@ function App() {
 
                   {isWaiting ? (
                     <button
-                      onClick={() => setWaitingPatients(prev => prev.filter(p => p.id !== patient.id))}
+                      onClick={() => deleteDoc(doc(db, 'waitingPatients', patient.id))}
                       className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition text-sm font-bold h-10"
                     >
                       <CheckCircle2 size={16} />
