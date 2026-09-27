@@ -5,7 +5,7 @@ import {
   Stethoscope, Users
 } from 'lucide-react';
 import { parseVoiceInput } from './voiceParser';
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 
 interface Patient {
@@ -46,8 +46,14 @@ function App() {
   const activeTabRef = useRef(activeTab);
 
   const [patients, setPatients] = useState<Patient[]>([]);
-
   const [waitingPatients, setWaitingPatients] = useState<Patient[]>([]);
+
+  const patientsRef = useRef<Patient[]>([]);
+  const waitingPatientsRef = useRef<Patient[]>([]);
+  const addPatientRef = useRef<any>(null);
+
+  useEffect(() => { patientsRef.current = patients; }, [patients]);
+  useEffect(() => { waitingPatientsRef.current = waitingPatients; }, [waitingPatients]);
 
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
@@ -241,7 +247,7 @@ function App() {
         setIsProcessing(true);
         const { name, phone } = await parseVoiceInput(transcript, settings.geminiKey);
         if (name && phone) {
-          addPatient(name, phone);
+          if (addPatientRef.current) addPatientRef.current(name, phone);
         } else {
           alert('لم يتم التعرف على الاسم والرقم. حاول مرة أخرى.');
         }
@@ -274,13 +280,39 @@ function App() {
   const addPatient = async (name: string, phone: string) => {
     const isWaitingTab = activeTabRef.current === 'waiting';
     const collectionName = isWaitingTab ? 'waitingPatients' : 'patients';
-    const list = isWaitingTab ? waitingPatients : patients;
-    const nextSerial = list.length > 0 ? Math.max(...list.map(p => p.serialNumber)) + 1 : 1;
+    
+    let maxSerial = 0;
+    try {
+      const snap = await getDocs(collection(db, collectionName));
+      snap.forEach(docSnap => {
+        const data = docSnap.data();
+        const s = Number(data.serialNumber);
+        if (!isNaN(s) && s > maxSerial) {
+          maxSerial = s;
+        }
+      });
+    } catch (err) {
+      console.warn('Could not read from Firestore, falling back to local state:', err);
+    }
+
+    const localList = isWaitingTab ? waitingPatientsRef.current : patientsRef.current;
+    localList.forEach(p => {
+      const s = Number(p.serialNumber);
+      if (!isNaN(s) && s > maxSerial) {
+        maxSerial = s;
+      }
+    });
+
+    const nextSerial = maxSerial > 0 ? maxSerial + 1 : 1;
     const randomColor = cardColors[nextSerial % cardColors.length];
     
     const newPatient = { id: crypto.randomUUID(), serialNumber: nextSerial, name, phone, done: false, createdAt: Date.now(), colorClass: randomColor };
     await setDoc(doc(db, collectionName, newPatient.id), newPatient);
   };
+
+  useEffect(() => {
+    addPatientRef.current = addPatient;
+  });
 
   const markDone = async (id: string) => {
     if (activeTab === 'waiting') return;
